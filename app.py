@@ -53,12 +53,12 @@ if 'mistakes' not in st.session_state:
 # 切換題庫時，把所有頁籤的暫存紀錄清空
 if "current_bank" not in st.session_state or st.session_state.current_bank != selected_file:
     st.session_state.current_bank = selected_file
-    # 清理舊的狀態
     for key in list(st.session_state.keys()):
-        if key in ['test_set', 'submitted', 'user_answers', 'quick_q'] or key.startswith('quick_ans'):
+        if key in ['test_set', 'submitted', 'user_answers', 'quick_q', 'current_mistake_q'] or key.startswith('quick_ans') or key.startswith('m_ans'):
             del st.session_state[key]
     st.session_state.mistakes = {} 
-    st.session_state.quick_key = 0 # 重置動態 ID
+    st.session_state.quick_key = 0 
+    st.session_state.mistake_q_key = 0 # 新增錯題闖關的動態 ID
 
 with st.spinner(f'載入 {selected_file} 中，請稍候...'):
     qs = load_and_parse_pdf(selected_file)
@@ -69,7 +69,8 @@ if not qs:
 
 st.success(f"🎉 成功載入！共偵測到 {len(qs)} 個題目。")
 
-tab1, tab2, tab3, tab4 = st.tabs(["🎲 隨機測驗", "🔍 查看特定題號", "⚡ 馬上讀", "📔 專屬錯題本"])
+# --- 💡 加入第五個頁籤：錯題闖關 ---
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🎲 隨機測驗", "🔍 查題號", "⚡ 馬上讀", "📔 錯題本", "🎯 錯題闖關"])
 
 with tab1:
     if 'submitted' not in st.session_state:
@@ -151,7 +152,6 @@ with tab3:
 
     if 'quick_q' not in st.session_state:
         st.session_state.quick_q = random.choice(qs)
-    # 加入動態 ID 計數器
     if 'quick_key' not in st.session_state:
         st.session_state.quick_key = 0
 
@@ -160,7 +160,6 @@ with tab3:
     st.markdown(f"**【題號 {q['id']}】**")
     st.write(q['text'])
 
-    # 💡 關鍵修復：每次換題，都給選項按鈕一個全新的專屬 ID
     current_radio_key = f"quick_ans_{st.session_state.quick_key}"
     
     quick_ans = st.radio(
@@ -178,10 +177,9 @@ with tab3:
             st.error(f"❌ 答錯了！正確答案是：({q['ans']})")
             st.session_state.mistakes[q['id']] = q
 
-        # 下一題的按鈕也綁定動態 ID
         if st.button("➡️ 下一題", key=f"next_quick_{st.session_state.quick_key}"):
             st.session_state.quick_q = random.choice(qs)
-            st.session_state.quick_key += 1  # 點擊後 ID 加 1，強制產生新按鈕
+            st.session_state.quick_key += 1  
             st.rerun()
 
 with tab4:
@@ -201,6 +199,54 @@ with tab4:
         if st.button("🗑️ 清空錯題本"):
             st.session_state.mistakes = {}
             st.rerun()
+
+# --- 🎯 錯題闖關 的運作邏輯 ---
+with tab5:
+    st.subheader("🎯 錯題闖關 (答對自動移除)")
+    
+    if not st.session_state.mistakes:
+        st.success("🎉 太神啦！目前錯題本空空如也，沒有需要闖關的題目！")
+    else:
+        if 'mistake_q_key' not in st.session_state:
+            st.session_state.mistake_q_key = 0
+            
+        mistake_list = list(st.session_state.mistakes.values())
+        
+        # 確保記憶中有一題來自錯題本的題目
+        if 'current_mistake_q' not in st.session_state or st.session_state.current_mistake_q['id'] not in st.session_state.mistakes:
+            st.session_state.current_mistake_q = random.choice(mistake_list)
+            
+        mq = st.session_state.current_mistake_q
+        
+        st.markdown(f"**【題號 {mq['id']}】**")
+        st.write(mq['text'])
+        
+        m_radio_key = f"m_ans_{st.session_state.mistake_q_key}"
+        
+        m_ans = st.radio(
+            "請選擇答案：",
+            options=["1", "2", "3", "4"],
+            key=m_radio_key,
+            horizontal=True,
+            index=None
+        )
+        
+        if m_ans is not None:
+            if m_ans == mq['ans']:
+                st.success("✅ 答對了！這題已成功從錯題本中消滅！")
+                # 答對了就直接從錯題本字典中拔除
+                if mq['id'] in st.session_state.mistakes:
+                    del st.session_state.mistakes[mq['id']]
+            else:
+                st.error(f"❌ 還是答錯了喔！正確答案是：({mq['ans']})，這題會繼續留在錯題本裡等你。")
+                
+            # 提供下一題按鈕，如果錯題本已經空了，按下去就會看到空空如也的祝賀畫面
+            if st.button("➡️ 繼續闖關", key=f"next_m_{st.session_state.mistake_q_key}"):
+                st.session_state.mistake_q_key += 1
+                if 'current_mistake_q' in st.session_state:
+                    del st.session_state.current_mistake_q
+                st.rerun()
+
 
 
 
