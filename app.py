@@ -19,6 +19,26 @@ def load_and_parse_pdf(file_path):
     except Exception as e:
         return []
 
+    # --- 🐛 抓蟲升級 1：防禦小數點偽裝 ---
+    # 在 \. 後面加上 (?!\d)，確保小數點後面不能接數字，才不會把 (1) 0.02 當成題號
+    pattern = r'\((\d)\)\s*(\d+)\.(?!\d)(.*?)(?=\(\d\)\s*\d+\.(?!\d)|$)'
+    
+    clean_text = re.sub(r'\n(?!\(\d\)\d+\.)', '', all_text)
+    matches = re.findall(pattern, clean_text, re.DOTALL)
+    
+    # --- 🐛 抓蟲升級 2：過濾 PDF 殘影 ---
+    # 使用字典 (dict) 來存題號，這樣如果不小心抓到重複的殘影，就會被後面完整的題目自動覆蓋
+    questions_dict = {}
+    for ans, num, content in matches:
+        questions_dict[num.strip()] = {
+            "id": num.strip(),
+            "ans": ans.strip(),
+            "text": content.strip()
+        }
+        
+    # 把過濾完的字典轉回原本系統需要的清單格式
+    return list(questions_dict.values())
+
     pattern = r'\((\d)\)\s*(\d+)\.(.*?)(?=\(\d\)\s*\d+\.|$)'
     clean_text = re.sub(r'\n(?!\(\d\)\d+\.)', '', all_text)
     matches = re.findall(pattern, clean_text, re.DOTALL)
@@ -246,6 +266,7 @@ with tab5:
                 if 'current_mistake_q' in st.session_state:
                     del st.session_state.current_mistake_q
                 st.rerun()
+
 
 
 
